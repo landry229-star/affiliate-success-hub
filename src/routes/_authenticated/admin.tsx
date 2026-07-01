@@ -2,18 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BarChart3, ShieldAlert } from "lucide-react";
+import { Plus, Pencil, Trash2, ShieldAlert } from "lucide-react";
 import { slugify, formatPrice } from "@/lib/format";
+import { AdminShell, type AdminSection } from "@/components/admin/AdminShell";
+import { AdminOverview } from "@/components/admin/AdminOverview";
+import { AdminStats } from "@/components/admin/AdminStats";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Admin — TopDeals" }, { name: "robots", content: "noindex" }] }),
@@ -34,61 +35,60 @@ function useIsAdmin() {
   return state;
 }
 
+const SECTION_META: Record<AdminSection, { title: string; subtitle: string }> = {
+  overview: { title: "Vue d'ensemble", subtitle: "L'état de votre site en un coup d'œil." },
+  products: { title: "Produits", subtitle: "Gérez votre catalogue affilié." },
+  categories: { title: "Catégories", subtitle: "Organisez vos produits par thème." },
+  posts: { title: "Articles", subtitle: "Publiez du contenu pour attirer du trafic." },
+  stats: { title: "Statistiques", subtitle: "Analysez vos performances d'affiliation." },
+};
+
 function Admin() {
   const { loading, isAdmin, userId } = useIsAdmin();
+  const [section, setSection] = useState<AdminSection>("overview");
 
-  if (loading) return <SiteLayout><div className="container-page py-20 text-center text-muted-foreground">Chargement...</div></SiteLayout>;
+  if (loading) return <div className="min-h-screen grid place-items-center text-muted-foreground">Chargement...</div>;
+  if (!isAdmin) return <NoAdminAccess userId={userId} />;
 
-  if (!isAdmin) return <SiteLayout><NoAdminAccess userId={userId} /></SiteLayout>;
-
+  const meta = SECTION_META[section];
   return (
-    <SiteLayout>
-      <div className="container-page py-10">
-        <h1 className="text-3xl md:text-4xl font-bold">Administration</h1>
-        <p className="text-muted-foreground mt-2">Gérez vos produits, catégories, articles et suivez vos clics affiliés.</p>
-
-        <Tabs defaultValue="products" className="mt-8">
-          <TabsList>
-            <TabsTrigger value="products">Produits</TabsTrigger>
-            <TabsTrigger value="categories">Catégories</TabsTrigger>
-            <TabsTrigger value="posts">Articles</TabsTrigger>
-            <TabsTrigger value="stats">Stats</TabsTrigger>
-          </TabsList>
-          <TabsContent value="products" className="mt-6"><ProductsAdmin /></TabsContent>
-          <TabsContent value="categories" className="mt-6"><CategoriesAdmin /></TabsContent>
-          <TabsContent value="posts" className="mt-6"><PostsAdmin /></TabsContent>
-          <TabsContent value="stats" className="mt-6"><StatsAdmin /></TabsContent>
-        </Tabs>
-      </div>
-    </SiteLayout>
+    <AdminShell active={section} onChange={setSection} title={meta.title} subtitle={meta.subtitle}>
+      {section === "overview" && <AdminOverview onNavigate={setSection} />}
+      {section === "products" && <ProductsAdmin />}
+      {section === "categories" && <CategoriesAdmin />}
+      {section === "posts" && <PostsAdmin />}
+      {section === "stats" && <AdminStats />}
+    </AdminShell>
   );
 }
 
 function NoAdminAccess({ userId }: { userId: string | null }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="container-page py-20 max-w-2xl text-center">
-      <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 grid place-items-center text-destructive">
-        <ShieldAlert className="h-6 w-6" />
-      </div>
-      <h1 className="mt-4 text-2xl font-bold">Accès admin requis</h1>
-      <p className="mt-2 text-muted-foreground">Votre compte n'a pas le rôle <code>admin</code>.</p>
-      {userId && (
-        <div className="mt-6 rounded-xl border border-border bg-card p-5 text-left text-sm">
-          <p className="font-medium">Pour vous donner les droits admin, exécutez cette requête SQL une seule fois :</p>
-          <pre className="mt-3 bg-muted rounded-md p-3 text-xs overflow-auto">{`INSERT INTO public.user_roles (user_id, role)\nVALUES ('${userId}', 'admin');`}</pre>
-          <Button size="sm" variant="outline" className="mt-3" onClick={() => { navigator.clipboard.writeText(`INSERT INTO public.user_roles (user_id, role) VALUES ('${userId}', 'admin');`); setCopied(true); setTimeout(()=>setCopied(false), 2000); }}>
-            {copied ? "Copié !" : "Copier"}
-          </Button>
-          <p className="mt-3 text-xs text-muted-foreground">Demandez à votre développeur Lovable d'exécuter cette commande dans la console SQL.</p>
+    <div className="min-h-screen grid place-items-center px-4">
+      <div className="max-w-lg w-full text-center">
+        <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 grid place-items-center text-destructive">
+          <ShieldAlert className="h-6 w-6" />
         </div>
-      )}
-      <div className="mt-6">
-        <Link to="/" className="text-accent hover:underline">← Retour à l'accueil</Link>
+        <h1 className="mt-4 text-2xl font-bold">Accès admin requis</h1>
+        <p className="mt-2 text-muted-foreground">Votre compte n'a pas le rôle <code>admin</code>.</p>
+        {userId && (
+          <div className="mt-6 rounded-xl border border-border bg-card p-5 text-left text-sm">
+            <p className="font-medium">Exécutez cette requête SQL une seule fois :</p>
+            <pre className="mt-3 bg-muted rounded-md p-3 text-xs overflow-auto">{`INSERT INTO public.user_roles (user_id, role)\nVALUES ('${userId}', 'admin');`}</pre>
+            <Button size="sm" variant="outline" className="mt-3" onClick={() => { navigator.clipboard.writeText(`INSERT INTO public.user_roles (user_id, role) VALUES ('${userId}', 'admin');`); setCopied(true); setTimeout(()=>setCopied(false), 2000); }}>
+              {copied ? "Copié !" : "Copier"}
+            </Button>
+          </div>
+        )}
+        <div className="mt-6">
+          <Link to="/" className="text-accent hover:underline">← Retour à l'accueil</Link>
+        </div>
       </div>
     </div>
   );
 }
+
 
 /* ============ PRODUCTS ============ */
 
