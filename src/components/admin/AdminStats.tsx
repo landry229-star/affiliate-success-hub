@@ -1,15 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { BarChart3, MousePointerClick, Package, Newspaper, TrendingUp, Calendar, Trophy, Users } from "lucide-react";
+import { BarChart3, MousePointerClick, Package, Newspaper, TrendingUp, Calendar, Trophy, Users, AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import { formatPrice } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ClickRow = { id: string; product_id: string | null; clicked_at: string; user_agent: string | null };
 
 const PIE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 export function AdminStats() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["admin-advanced-stats"],
     queryFn: async () => {
       const [clicksRes, productsRes, categoriesRes, postsRes] = await Promise.all([
@@ -18,6 +20,8 @@ export function AdminStats() {
         supabase.from("categories").select("id, name"),
         supabase.from("posts").select("id, published"),
       ]);
+      const firstError = clicksRes.error ?? productsRes.error ?? categoriesRes.error ?? postsRes.error;
+      if (firstError) throw new Error(firstError.message);
       return {
         clicks: (clicksRes.data ?? []) as ClickRow[],
         products: productsRes.data ?? [],
@@ -27,8 +31,45 @@ export function AdminStats() {
     },
   });
 
-  if (isLoading || !data) {
-    return <div className="text-muted-foreground text-sm">Chargement des statistiques…</div>;
+  if (isLoading) return <StatsSkeleton />;
+
+  if (isError) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 flex flex-col items-center text-center gap-3">
+        <div className="h-12 w-12 rounded-full bg-destructive/15 text-destructive grid place-items-center">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="font-display text-lg font-semibold">Impossible de charger les statistiques</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            {error instanceof Error ? error.message : "Une erreur inattendue est survenue."}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+          Réessayer
+        </Button>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const hasNoData = data.clicks.length === 0 && data.products.length === 0 && data.posts.length === 0;
+  if (hasNoData) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card p-10 flex flex-col items-center text-center gap-3">
+        <div className="h-14 w-14 rounded-full bg-muted text-muted-foreground grid place-items-center">
+          <Inbox className="h-7 w-7" />
+        </div>
+        <div>
+          <h3 className="font-display text-lg font-semibold">Aucune donnée pour l'instant</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Ajoutez des produits et publiez du contenu pour commencer à collecter des clics et voir vos statistiques ici.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const now = Date.now();
@@ -261,6 +302,45 @@ function EmptyChart() {
   return (
     <div className="h-72 grid place-items-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
       Pas encore assez de données pour afficher ce graphique.
+    </div>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="space-y-8" aria-busy="true" aria-label="Chargement des statistiques">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-border bg-card p-5">
+            <Skeleton className="h-9 w-9 rounded-lg" />
+            <Skeleton className="mt-3 h-3 w-24" />
+            <Skeleton className="mt-2 h-7 w-20" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-border bg-card p-5">
+            <Skeleton className="h-9 w-9 rounded-lg" />
+            <Skeleton className="mt-3 h-3 w-24" />
+            <Skeleton className="mt-2 h-7 w-16" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-border bg-card p-5 md:p-6">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="mt-2 h-3 w-64" />
+        <Skeleton className="mt-4 h-72 w-full" />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-border bg-card p-5 md:p-6">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="mt-2 h-3 w-56" />
+            <Skeleton className="mt-4 h-72 w-full" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
