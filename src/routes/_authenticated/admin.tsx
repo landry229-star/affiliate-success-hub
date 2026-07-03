@@ -15,6 +15,7 @@ import { slugify, formatPrice } from "@/lib/format";
 import { AdminShell, type AdminSection } from "@/components/admin/AdminShell";
 import { AdminOverview } from "@/components/admin/AdminOverview";
 import { AdminStats } from "@/components/admin/AdminStats";
+import { AdminChat } from "@/components/admin/AdminChat";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Admin — TopDeals" }, { name: "robots", content: "noindex" }] }),
@@ -40,6 +41,7 @@ const SECTION_META: Record<AdminSection, { title: string; subtitle: string }> = 
   products: { title: "Produits", subtitle: "Gérez votre catalogue affilié." },
   categories: { title: "Catégories", subtitle: "Organisez vos produits par thème." },
   posts: { title: "Articles", subtitle: "Publiez du contenu pour attirer du trafic." },
+  chat: { title: "Messages", subtitle: "Répondez aux visiteurs en direct." },
   stats: { title: "Statistiques", subtitle: "Analysez vos performances d'affiliation." },
 };
 
@@ -57,6 +59,7 @@ function Admin() {
       {section === "products" && <ProductsAdmin />}
       {section === "categories" && <CategoriesAdmin />}
       {section === "posts" && <PostsAdmin />}
+      {section === "chat" && <AdminChat />}
       {section === "stats" && <AdminStats />}
     </AdminShell>
   );

@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ShoppingBag, LayoutDashboard, Package, FolderTree, Newspaper, BarChart3, ArrowLeft } from "lucide-react";
+import { ShoppingBag, LayoutDashboard, Package, FolderTree, Newspaper, BarChart3, ArrowLeft, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AdminSection = "overview" | "products" | "categories" | "posts" | "stats";
+export type AdminSection = "overview" | "products" | "categories" | "posts" | "stats" | "chat";
 
 const NAV: { key: AdminSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: LayoutDashboard },
   { key: "products", label: "Produits", icon: Package },
   { key: "categories", label: "Catégories", icon: FolderTree },
   { key: "posts", label: "Articles", icon: Newspaper },
+  { key: "chat", label: "Messages", icon: MessageCircle },
   { key: "stats", label: "Statistiques", icon: BarChart3 },
 ];
 
