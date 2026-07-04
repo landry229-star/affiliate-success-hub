@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Trash2, Inbox } from "lucide-react";
+import { Loader2, Send, Trash2, Inbox, ExternalLink, Package } from "lucide-react";
 import { toast } from "sonner";
 
 type Session = {
@@ -12,9 +13,11 @@ type Session = {
   visitor_name: string | null;
   visitor_email: string | null;
   product_context: string | null;
+  product_id: string | null;
   last_message_at: string;
   unread_admin: number;
   created_at: string;
+  products?: { id: string; name: string; slug: string; image_url: string | null } | null;
 };
 
 type Msg = {
@@ -42,7 +45,7 @@ export function AdminChat() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("chat_sessions")
-        .select("*")
+        .select("*, products(id,name,slug,image_url)")
         .order("last_message_at", { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -105,8 +108,9 @@ export function AdminChat() {
                     <Badge className="h-5 min-w-5 px-1.5 text-[10px]">{s.unread_admin}</Badge>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground truncate mt-0.5">
-                  {s.product_context || "—"}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-0.5">
+                  <Package className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{s.products?.name || s.product_context || "Sans produit"}</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1">{timeAgo(s.last_message_at)}</div>
               </button>
@@ -198,17 +202,38 @@ function ChatThread({ session }: { session: Session }) {
 
   return (
     <>
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <div>
+      <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="font-semibold text-sm">{session.visitor_name || "Visiteur anonyme"}</div>
-          <div className="text-xs text-muted-foreground">
-            {session.product_context || "—"} · démarré {timeAgo(session.created_at)}
-          </div>
+          <div className="text-xs text-muted-foreground">démarré {timeAgo(session.created_at)}</div>
+          {session.products ? (
+            <Link
+              to="/produits/$slug"
+              params={{ slug: session.products.slug }}
+              target="_blank"
+              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors px-2 py-1.5 max-w-full"
+            >
+              <div className="h-7 w-7 rounded bg-background border border-border overflow-hidden shrink-0 grid place-items-center">
+                {session.products.image_url ? (
+                  <img src={session.products.image_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Package className="h-3 w-3 text-muted-foreground" />
+                )}
+              </div>
+              <span className="text-xs font-medium truncate">{session.products.name}</span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+            </Link>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground italic">
+              {session.product_context || "Aucun produit lié"}
+            </div>
+          )}
         </div>
         <Button variant="ghost" size="sm" onClick={deleteSession}>
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
+
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
         {msgsQuery.isLoading && (

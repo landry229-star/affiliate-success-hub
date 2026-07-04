@@ -79,6 +79,7 @@ export type Database = {
           id: string
           last_message_at: string
           product_context: string | null
+          product_id: string | null
           unread_admin: number
           unread_visitor: number
           updated_at: string
@@ -91,6 +92,7 @@ export type Database = {
           id?: string
           last_message_at?: string
           product_context?: string | null
+          product_id?: string | null
           unread_admin?: number
           unread_visitor?: number
           updated_at?: string
@@ -103,6 +105,7 @@ export type Database = {
           id?: string
           last_message_at?: string
           product_context?: string | null
+          product_id?: string | null
           unread_admin?: number
           unread_visitor?: number
           updated_at?: string
@@ -110,7 +113,15 @@ export type Database = {
           visitor_email?: string | null
           visitor_name?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clicks: {
         Row: {

@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const LS_KEY = "td_chat_session_v1";
+const LS_KEY = "td_chat_sessions_v2"; // { [productId | "_general"]: { id, name } }
+
+export type ChatProduct = {
+  id: string;
+  name: string;
+  slug: string;
+  image_url?: string | null;
+};
 
 type Msg = {
   id: string;
@@ -16,16 +23,26 @@ type Msg = {
   created_at: string;
 };
 
-function loadLS(): { id: string; name?: string } | null {
+type Store = Record<string, { id: string; name?: string }>;
+
+function loadStore(): Store {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? (JSON.parse(raw) as Store) : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-export function ChatWidget() {
+function saveStore(store: Store) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(store));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function ChatWidget({ product }: { product?: ChatProduct | null }) {
   const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [visitorName, setVisitorName] = useState("");
@@ -36,14 +53,18 @@ export function ChatWidget() {
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Init from localStorage
+  const productKey = product?.id ?? null;
+
+  // Load session for current product from localStorage whenever product changes
   useEffect(() => {
-    const s = loadLS();
-    if (s) {
-      setSessionId(s.id);
-      setVisitorName(s.name ?? "");
-    }
-  }, []);
+    const store = loadStore();
+    const key = productKey ?? "_general";
+    const entry = store[key];
+    setSessionId(entry?.id ?? null);
+    setVisitorName(entry?.name ?? "");
+    setMessages([]);
+    setInput("");
+  }, [productKey]);
 
   // Load messages when session exists
   useEffect(() => {
@@ -66,7 +87,7 @@ export function ChatWidget() {
     };
   }, [sessionId]);
 
-  // Realtime subscription
+  // Realtime
   useEffect(() => {
     if (!sessionId) return;
     const channel = supabase
@@ -88,20 +109,24 @@ export function ChatWidget() {
     };
   }, [sessionId, open]);
 
-  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, open]);
 
   async function ensureSession(): Promise<string | null> {
     if (sessionId) return sessionId;
+    if (!product) {
+      toast.error("Ouvrez d'abord un produit pour démarrer une discussion.");
+      return null;
+    }
     const name = nameDraft.trim() || "Visiteur";
     const { data, error } = await supabase
       .from("chat_sessions")
       .insert({
         visitor_name: name,
         user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 200) : null,
-        product_context: typeof window !== "undefined" ? window.location.pathname : null,
+        product_id: product.id,
+        product_context: product.name,
       })
       .select("id")
       .single();
@@ -111,17 +136,19 @@ export function ChatWidget() {
     }
     setSessionId(data.id);
     setVisitorName(name);
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ id: data.id, name }));
-    } catch {
-      /* ignore */
-    }
+    const store = loadStore();
+    store[product.id] = { id: data.id, name };
+    saveStore(store);
     return data.id;
   }
 
   async function send() {
     const text = input.trim();
     if (!text || sending) return;
+    if (!product) {
+      toast.error("Ouvrez un produit pour discuter de cet article.");
+      return;
+    }
     setSending(true);
     const sid = await ensureSession();
     if (!sid) {
@@ -136,20 +163,22 @@ export function ChatWidget() {
       setSending(false);
       return;
     }
-    // Update session metadata (last message, unread admin)
     await supabase
       .from("chat_sessions")
-      .update({ last_message_at: new Date().toISOString(), unread_admin: (messages.filter((m) => m.sender === "visitor").length + 1) })
+      .update({
+        last_message_at: new Date().toISOString(),
+        unread_admin: messages.filter((m) => m.sender === "visitor").length + 1,
+      })
       .eq("id", sid);
     setInput("");
     setSending(false);
   }
 
+  const noProduct = !product;
   const needsName = !sessionId && !nameDraft.trim();
 
   return (
     <>
-      {/* Floating button */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
@@ -160,24 +189,48 @@ export function ChatWidget() {
         </button>
       )}
 
-      {/* Panel */}
       {open && (
         <div className="fixed bottom-5 right-5 z-50 w-[calc(100vw-2.5rem)] max-w-sm h-[70vh] max-h-[560px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border gradient-accent text-accent-foreground">
             <div>
               <div className="font-display font-semibold text-sm">Support TopDeals</div>
-              <div className="text-[11px] opacity-90">On répond dès que possible</div>
+              <div className="text-[11px] opacity-90">
+                {product ? `À propos de ce produit` : "Ouvrez un produit pour discuter"}
+              </div>
             </div>
             <button onClick={() => setOpen(false)} aria-label="Fermer" className="p-1 rounded hover:bg-black/10">
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Body */}
+          {/* Product banner */}
+          {product && (
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/40">
+              <div className="h-9 w-9 rounded-md bg-background border border-border overflow-hidden shrink-0 grid place-items-center">
+                {product.image_url ? (
+                  <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Discussion sur</div>
+                <div className="text-xs font-semibold truncate">{product.name}</div>
+              </div>
+            </div>
+          )}
+
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2 bg-muted/20">
-            {!sessionId && (
+            {noProduct && (
+              <div className="text-sm text-muted-foreground py-8 text-center px-4">
+                <Package className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                <p>Pour discuter avec le support, ouvrez d'abord la fiche d'un produit.</p>
+                <p className="text-xs mt-2">Chaque conversation est liée à un article précis pour un suivi clair.</p>
+              </div>
+            )}
+            {!noProduct && !sessionId && (
               <div className="text-sm text-muted-foreground space-y-3 py-2">
-                <p>Bonjour&nbsp;! Une question sur un produit&nbsp;? Écrivez-nous, on vous répond.</p>
+                <p>Bonjour&nbsp;! Une question sur <span className="font-semibold text-foreground">{product.name}</span>&nbsp;? Écrivez-nous.</p>
                 <div>
                   <label className="text-xs font-medium">Votre prénom (optionnel)</label>
                   <Input
@@ -214,7 +267,6 @@ export function ChatWidget() {
             )}
           </div>
 
-          {/* Composer */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -232,16 +284,23 @@ export function ChatWidget() {
                     send();
                   }
                 }}
-                placeholder={needsName ? "Écrivez votre message..." : "Votre message..."}
+                placeholder={
+                  noProduct
+                    ? "Choisissez un produit pour écrire..."
+                    : needsName
+                      ? "Écrivez votre message..."
+                      : "Votre message..."
+                }
                 rows={1}
                 maxLength={2000}
+                disabled={noProduct}
                 className="min-h-[40px] max-h-32 resize-none text-sm"
               />
-              <Button type="submit" size="icon" disabled={sending || !input.trim()} aria-label="Envoyer">
+              <Button type="submit" size="icon" disabled={sending || !input.trim() || noProduct} aria-label="Envoyer">
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
-            {visitorName && (
+            {visitorName && !noProduct && (
               <div className="text-[10px] text-muted-foreground mt-1 px-1">Connecté en tant que {visitorName}</div>
             )}
           </form>
