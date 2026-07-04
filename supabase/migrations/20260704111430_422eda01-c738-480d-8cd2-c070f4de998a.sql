@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.chat_messages_rate_limit() FROM PUBLIC, anon, authenticated;

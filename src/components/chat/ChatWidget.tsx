@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Loader2, Package } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Package, ShieldCheck } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useRecaptcha, useRecaptchaEnabled } from "@/hooks/useRecaptcha";
+import { verifyRecaptchaToken } from "@/lib/recaptcha.functions";
 
 const LS_KEY = "td_chat_sessions_v2"; // { [productId | "_general"]: { id, name } }
+const CLIENT_COOLDOWN_MS = 2500;
 
 export type ChatProduct = {
   id: string;
@@ -51,7 +55,13 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [honeypot, setHoneypot] = useState(""); // spam trap — real users leave empty
+  const lastSentRef = useRef<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const captchaRef = useRef<HTMLDivElement>(null);
+  const recaptchaEnabled = useRecaptchaEnabled();
+  const { token: captchaToken, reset: resetCaptcha } = useRecaptcha(captchaRef, recaptchaEnabled && open);
+  const verifyCaptcha = useServerFn(verifyRecaptchaToken);
 
   const productKey = product?.id ?? null;
 
@@ -142,6 +152,16 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
     return data.id;
   }
 
+  function mapServerError(msg: string | undefined): string {
+    const m = (msg ?? "").toLowerCase();
+    if (m.includes("patienter")) return "Attendez quelques secondes avant d'envoyer un autre message.";
+    if (m.includes("trop de messages")) return "Trop de messages envoyés. Réessayez dans une minute.";
+    if (m.includes("limite horaire")) return "Vous avez atteint la limite horaire de messages.";
+    if (m.includes("trop long")) return "Votre message est trop long (max 2000 caractères).";
+    if (m.includes("vide")) return "Le message est vide.";
+    return "Envoi impossible. Réessayez.";
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || sending) return;
@@ -149,6 +169,39 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       toast.error("Ouvrez un produit pour discuter de cet article.");
       return;
     }
+
+    // Honeypot — bot filled the hidden field
+    if (honeypot) {
+      setInput("");
+      return;
+    }
+
+    // Client cooldown to avoid double-clicks / spammy bursts
+    const now = Date.now();
+    if (now - lastSentRef.current < CLIENT_COOLDOWN_MS) {
+      toast.error("Attendez un instant avant d'envoyer un autre message.");
+      return;
+    }
+
+    // Optional reCAPTCHA
+    if (recaptchaEnabled) {
+      if (!captchaToken) {
+        toast.error("Merci de valider le reCAPTCHA avant d'envoyer.");
+        return;
+      }
+      try {
+        const result = await verifyCaptcha({ data: { token: captchaToken } });
+        if (!result.ok) {
+          toast.error("Vérification anti-robot échouée. Réessayez.");
+          resetCaptcha();
+          return;
+        }
+      } catch {
+        toast.error("Impossible de vérifier le reCAPTCHA.");
+        return;
+      }
+    }
+
     setSending(true);
     const sid = await ensureSession();
     if (!sid) {
@@ -159,10 +212,11 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       .from("chat_messages")
       .insert({ session_id: sid, sender: "visitor", content: text });
     if (error) {
-      toast.error("Envoi impossible");
+      toast.error(mapServerError(error.message));
       setSending(false);
       return;
     }
+    lastSentRef.current = Date.now();
     await supabase
       .from("chat_sessions")
       .update({
@@ -171,6 +225,7 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       })
       .eq("id", sid);
     setInput("");
+    resetCaptcha();
     setSending(false);
   }
 
@@ -274,6 +329,24 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
             }}
             className="border-t border-border p-2 bg-card"
           >
+            {/* Honeypot — hidden from real users, filled by naive bots */}
+            <input
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+              aria-hidden="true"
+              className="absolute w-0 h-0 opacity-0 pointer-events-none"
+              name="website"
+            />
+
+            {recaptchaEnabled && !noProduct && (
+              <div className="mb-2 flex justify-center">
+                <div ref={captchaRef} />
+              </div>
+            )}
+
             <div className="flex items-end gap-2">
               <Textarea
                 value={input}
@@ -296,13 +369,25 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
                 disabled={noProduct}
                 className="min-h-[40px] max-h-32 resize-none text-sm"
               />
-              <Button type="submit" size="icon" disabled={sending || !input.trim() || noProduct} aria-label="Envoyer">
+              <Button
+                type="submit"
+                size="icon"
+                disabled={sending || !input.trim() || noProduct || (recaptchaEnabled && !captchaToken)}
+                aria-label="Envoyer"
+              >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
-            {visitorName && !noProduct && (
-              <div className="text-[10px] text-muted-foreground mt-1 px-1">Connecté en tant que {visitorName}</div>
-            )}
+            <div className="flex items-center justify-between mt-1 px-1">
+              {visitorName && !noProduct ? (
+                <div className="text-[10px] text-muted-foreground">Connecté en tant que {visitorName}</div>
+              ) : (
+                <span />
+              )}
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Protégé anti-spam
+              </div>
+            </div>
           </form>
         </div>
       )}
