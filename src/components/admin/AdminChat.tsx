@@ -45,7 +45,7 @@ export function AdminChat() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("chat_sessions")
-        .select("*")
+        .select("*, products(id,name,slug,image_url)")
         .order("last_message_at", { ascending: false })
         .limit(200);
       if (error) throw error;
