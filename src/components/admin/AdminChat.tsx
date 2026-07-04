@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Trash2, Inbox } from "lucide-react";
+import { Loader2, Send, Trash2, Inbox, ExternalLink, Package } from "lucide-react";
 import { toast } from "sonner";
 
 type Session = {
@@ -12,9 +13,11 @@ type Session = {
   visitor_name: string | null;
   visitor_email: string | null;
   product_context: string | null;
+  product_id: string | null;
   last_message_at: string;
   unread_admin: number;
   created_at: string;
+  products?: { id: string; name: string; slug: string; image_url: string | null } | null;
 };
 
 type Msg = {
