@@ -20,12 +20,14 @@ export function AdminShell({
   onChange,
   title,
   subtitle,
+  unreadChat = 0,
   children,
 }: {
   active: AdminSection;
   onChange: (s: AdminSection) => void;
   title: string;
   subtitle?: string;
+  unreadChat?: number;
   children: ReactNode;
 }) {
   return (
