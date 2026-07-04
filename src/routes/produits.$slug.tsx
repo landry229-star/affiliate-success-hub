@@ -64,7 +64,14 @@ function ProductDetail() {
   const { product, similar } = data;
 
   return (
-    <SiteLayout>
+    <SiteLayout
+      chatProduct={{
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        image_url: product.image_url,
+      }}
+    >
       <div className="container-page py-10">
         <nav className="text-sm text-muted-foreground mb-6">
           <Link to="/produits" className="hover:text-foreground">Produits</Link>
