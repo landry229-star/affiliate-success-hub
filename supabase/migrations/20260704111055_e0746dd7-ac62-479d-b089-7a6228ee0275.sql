@@ -1,0 +1,2 @@
+ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS product_id uuid REFERENCES public.products(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_product ON public.chat_sessions(product_id);
