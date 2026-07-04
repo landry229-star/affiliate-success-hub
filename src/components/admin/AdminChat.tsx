@@ -202,17 +202,38 @@ function ChatThread({ session }: { session: Session }) {
 
   return (
     <>
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <div>
+      <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="font-semibold text-sm">{session.visitor_name || "Visiteur anonyme"}</div>
-          <div className="text-xs text-muted-foreground">
-            {session.product_context || "—"} · démarré {timeAgo(session.created_at)}
-          </div>
+          <div className="text-xs text-muted-foreground">démarré {timeAgo(session.created_at)}</div>
+          {session.products ? (
+            <Link
+              to="/produits/$slug"
+              params={{ slug: session.products.slug }}
+              target="_blank"
+              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors px-2 py-1.5 max-w-full"
+            >
+              <div className="h-7 w-7 rounded bg-background border border-border overflow-hidden shrink-0 grid place-items-center">
+                {session.products.image_url ? (
+                  <img src={session.products.image_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Package className="h-3 w-3 text-muted-foreground" />
+                )}
+              </div>
+              <span className="text-xs font-medium truncate">{session.products.name}</span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+            </Link>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground italic">
+              {session.product_context || "Aucun produit lié"}
+            </div>
+          )}
         </div>
         <Button variant="ghost" size="sm" onClick={deleteSession}>
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
+
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
         {msgsQuery.isLoading && (
