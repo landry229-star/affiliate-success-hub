@@ -152,6 +152,16 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
     return data.id;
   }
 
+  function mapServerError(msg: string | undefined): string {
+    const m = (msg ?? "").toLowerCase();
+    if (m.includes("patienter")) return "Attendez quelques secondes avant d'envoyer un autre message.";
+    if (m.includes("trop de messages")) return "Trop de messages envoyés. Réessayez dans une minute.";
+    if (m.includes("limite horaire")) return "Vous avez atteint la limite horaire de messages.";
+    if (m.includes("trop long")) return "Votre message est trop long (max 2000 caractères).";
+    if (m.includes("vide")) return "Le message est vide.";
+    return "Envoi impossible. Réessayez.";
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || sending) return;
@@ -159,6 +169,39 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       toast.error("Ouvrez un produit pour discuter de cet article.");
       return;
     }
+
+    // Honeypot — bot filled the hidden field
+    if (honeypot) {
+      setInput("");
+      return;
+    }
+
+    // Client cooldown to avoid double-clicks / spammy bursts
+    const now = Date.now();
+    if (now - lastSentRef.current < CLIENT_COOLDOWN_MS) {
+      toast.error("Attendez un instant avant d'envoyer un autre message.");
+      return;
+    }
+
+    // Optional reCAPTCHA
+    if (recaptchaEnabled) {
+      if (!captchaToken) {
+        toast.error("Merci de valider le reCAPTCHA avant d'envoyer.");
+        return;
+      }
+      try {
+        const result = await verifyCaptcha({ data: { token: captchaToken } });
+        if (!result.ok) {
+          toast.error("Vérification anti-robot échouée. Réessayez.");
+          resetCaptcha();
+          return;
+        }
+      } catch {
+        toast.error("Impossible de vérifier le reCAPTCHA.");
+        return;
+      }
+    }
+
     setSending(true);
     const sid = await ensureSession();
     if (!sid) {
@@ -169,10 +212,11 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       .from("chat_messages")
       .insert({ session_id: sid, sender: "visitor", content: text });
     if (error) {
-      toast.error("Envoi impossible");
+      toast.error(mapServerError(error.message));
       setSending(false);
       return;
     }
+    lastSentRef.current = Date.now();
     await supabase
       .from("chat_sessions")
       .update({
@@ -181,6 +225,7 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
       })
       .eq("id", sid);
     setInput("");
+    resetCaptcha();
     setSending(false);
   }
 
