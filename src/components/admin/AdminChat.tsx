@@ -108,8 +108,9 @@ export function AdminChat() {
                     <Badge className="h-5 min-w-5 px-1.5 text-[10px]">{s.unread_admin}</Badge>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground truncate mt-0.5">
-                  {s.product_context || "—"}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-0.5">
+                  <Package className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{s.products?.name || s.product_context || "Sans produit"}</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1">{timeAgo(s.last_message_at)}</div>
               </button>
