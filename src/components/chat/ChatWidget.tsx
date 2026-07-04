@@ -55,7 +55,13 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [honeypot, setHoneypot] = useState(""); // spam trap — real users leave empty
+  const lastSentRef = useRef<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const captchaRef = useRef<HTMLDivElement>(null);
+  const recaptchaEnabled = useRecaptchaEnabled();
+  const { token: captchaToken, reset: resetCaptcha } = useRecaptcha(captchaRef, recaptchaEnabled && open);
+  const verifyCaptcha = useServerFn(verifyRecaptchaToken);
 
   const productKey = product?.id ?? null;
 
