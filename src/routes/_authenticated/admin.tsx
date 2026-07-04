@@ -49,13 +49,25 @@ const SECTION_META: Record<AdminSection, { title: string; subtitle: string }> = 
 function Admin() {
   const { loading, isAdmin, userId } = useIsAdmin();
   const [section, setSection] = useState<AdminSection>("overview");
+  const navigateToChat = useCallback(() => setSection("chat"), []);
+  useAdminNotifications(isAdmin ? navigateToChat : undefined);
+
+  const { data: unreadChat = 0 } = useQuery({
+    queryKey: ["admin-unread-chat"],
+    queryFn: async () => {
+      const { data } = await supabase.from("chat_sessions").select("unread_admin");
+      return (data ?? []).reduce((sum, s) => sum + (s.unread_admin ?? 0), 0);
+    },
+    enabled: isAdmin,
+    refetchInterval: 15000,
+  });
 
   if (loading) return <div className="min-h-screen grid place-items-center text-muted-foreground">Chargement...</div>;
   if (!isAdmin) return <NoAdminAccess userId={userId} />;
 
   const meta = SECTION_META[section];
   return (
-    <AdminShell active={section} onChange={setSection} title={meta.title} subtitle={meta.subtitle}>
+    <AdminShell active={section} onChange={setSection} title={meta.title} subtitle={meta.subtitle} unreadChat={unreadChat}>
       {section === "overview" && <AdminOverview onNavigate={setSection} />}
       {section === "products" && <ProductsAdmin />}
       {section === "categories" && <CategoriesAdmin />}
