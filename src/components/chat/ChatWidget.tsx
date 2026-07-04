@@ -329,6 +329,24 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
             }}
             className="border-t border-border p-2 bg-card"
           >
+            {/* Honeypot — hidden from real users, filled by naive bots */}
+            <input
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+              aria-hidden="true"
+              className="absolute w-0 h-0 opacity-0 pointer-events-none"
+              name="website"
+            />
+
+            {recaptchaEnabled && !noProduct && (
+              <div className="mb-2 flex justify-center">
+                <div ref={captchaRef} />
+              </div>
+            )}
+
             <div className="flex items-end gap-2">
               <Textarea
                 value={input}
@@ -351,13 +369,25 @@ export function ChatWidget({ product }: { product?: ChatProduct | null }) {
                 disabled={noProduct}
                 className="min-h-[40px] max-h-32 resize-none text-sm"
               />
-              <Button type="submit" size="icon" disabled={sending || !input.trim() || noProduct} aria-label="Envoyer">
+              <Button
+                type="submit"
+                size="icon"
+                disabled={sending || !input.trim() || noProduct || (recaptchaEnabled && !captchaToken)}
+                aria-label="Envoyer"
+              >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
-            {visitorName && !noProduct && (
-              <div className="text-[10px] text-muted-foreground mt-1 px-1">Connecté en tant que {visitorName}</div>
-            )}
+            <div className="flex items-center justify-between mt-1 px-1">
+              {visitorName && !noProduct ? (
+                <div className="text-[10px] text-muted-foreground">Connecté en tant que {visitorName}</div>
+              ) : (
+                <span />
+              )}
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Protégé anti-spam
+              </div>
+            </div>
           </form>
         </div>
       )}
