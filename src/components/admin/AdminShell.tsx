@@ -48,6 +48,7 @@ export function AdminShell({
             {NAV.map((n) => {
               const Icon = n.icon;
               const isActive = active === n.key;
+              const badge = n.key === "chat" && unreadChat > 0 ? unreadChat : 0;
               return (
                 <button
                   key={n.key}
@@ -57,7 +58,12 @@ export function AdminShell({
                   }`}
                 >
                   <Icon className="h-4 w-4" />
-                  {n.label}
+                  <span className="flex-1 text-left">{n.label}</span>
+                  {badge > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
