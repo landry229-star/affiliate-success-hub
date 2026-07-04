@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Loader2, Package } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Package, ShieldCheck } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useRecaptcha, useRecaptchaEnabled } from "@/hooks/useRecaptcha";
+import { verifyRecaptchaToken } from "@/lib/recaptcha.functions";
 
 const LS_KEY = "td_chat_sessions_v2"; // { [productId | "_general"]: { id, name } }
+const CLIENT_COOLDOWN_MS = 2500;
 
 export type ChatProduct = {
   id: string;
