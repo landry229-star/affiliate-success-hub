@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
-import { ChatWidget } from "./chat/ChatWidget";
+import { ChatWidget, type ChatProduct } from "./chat/ChatWidget";
 
-export function SiteLayout({ children }: { children: ReactNode }) {
+export function SiteLayout({ children, chatProduct }: { children: ReactNode; chatProduct?: ChatProduct | null }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />
-      <ChatWidget />
+      <ChatWidget product={chatProduct ?? null} />
     </div>
   );
 }
