@@ -82,6 +82,22 @@ function VerifyEmailPage() {
     };
   }, [navigate]);
 
+  // Init cooldown from storage + tick every second
+  useEffect(() => {
+    const { until, attempts } = readCooldown();
+    attemptsRef.current = attempts;
+    const compute = () => {
+      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      setSecondsLeft(left);
+      return left;
+    };
+    if (compute() === 0) return;
+    const id = window.setInterval(() => {
+      if (compute() === 0) window.clearInterval(id);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   async function refresh() {
     setChecking(true);
     try {
