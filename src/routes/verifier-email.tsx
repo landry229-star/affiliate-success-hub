@@ -192,8 +192,17 @@ function VerifyEmailPage() {
             <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
             J'ai vérifié
           </Button>
-          <Button variant="outline" onClick={resend} disabled={resending || !email} className="flex-1">
-            {resending ? "Envoi..." : "Renvoyer l'email"}
+          <Button
+            variant="outline"
+            onClick={resend}
+            disabled={resending || !email || secondsLeft > 0}
+            className="flex-1"
+          >
+            {resending
+              ? "Envoi..."
+              : secondsLeft > 0
+                ? `Renvoyer (${secondsLeft}s)`
+                : "Renvoyer l'email"}
           </Button>
         </div>
 
