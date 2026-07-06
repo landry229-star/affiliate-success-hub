@@ -17,11 +17,46 @@ export const Route = createFileRoute("/verifier-email")({
   component: VerifyEmailPage,
 });
 
+const COOLDOWN_KEY = "verify-email-resend";
+const BASE_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 15 * 60_000;
+
+function readCooldown(): { until: number; attempts: number } {
+  if (typeof window === "undefined") return { until: 0, attempts: 0 };
+  try {
+    const raw = localStorage.getItem(COOLDOWN_KEY);
+    if (!raw) return { until: 0, attempts: 0 };
+    const parsed = JSON.parse(raw) as { until?: number; attempts?: number };
+    return { until: parsed.until ?? 0, attempts: parsed.attempts ?? 0 };
+  } catch {
+    return { until: 0, attempts: 0 };
+  }
+}
+
+function translateAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("rate") || m.includes("too many") || m.includes("limit")) {
+    return "Trop de tentatives. Merci de patienter avant de réessayer.";
+  }
+  if (m.includes("already") && m.includes("confirm")) {
+    return "Cet email est déjà vérifié. Reconnectez-vous.";
+  }
+  if (m.includes("not found") || m.includes("user")) {
+    return "Utilisateur introuvable. Veuillez vous reconnecter.";
+  }
+  if (m.includes("network") || m.includes("fetch")) {
+    return "Problème de connexion. Vérifiez votre réseau et réessayez.";
+  }
+  return "Impossible d'envoyer l'email de vérification. Réessayez plus tard.";
+}
+
 function VerifyEmailPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const attemptsRef = useRef(0);
 
   useEffect(() => {
     let active = true;
