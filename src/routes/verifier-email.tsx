@@ -1,0 +1,135 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { SiteLayout } from "@/components/SiteLayout";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { MailCheck, RefreshCw, LogOut } from "lucide-react";
+
+export const Route = createFileRoute("/verifier-email")({
+  ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Vérifier votre email — TopDeals" },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
+  component: VerifyEmailPage,
+});
+
+function VerifyEmailPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      const user = data.user;
+      if (!user) {
+        navigate({ to: "/auth" });
+        return;
+      }
+      const confirmed =
+        Boolean(user.email_confirmed_at) ||
+        Boolean((user as { confirmed_at?: string | null }).confirmed_at) ||
+        user.app_metadata?.provider !== "email";
+      if (confirmed) {
+        navigate({ to: "/admin" });
+        return;
+      }
+      setEmail(user.email ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
+  async function refresh() {
+    setChecking(true);
+    try {
+      await supabase.auth.refreshSession();
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+      const confirmed =
+        Boolean(user?.email_confirmed_at) ||
+        Boolean((user as { confirmed_at?: string | null } | null)?.confirmed_at);
+      if (confirmed) {
+        toast.success("Email vérifié !");
+        navigate({ to: "/admin" });
+      } else {
+        toast.info("Email pas encore vérifié. Pensez à cliquer sur le lien reçu.");
+      }
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function resend() {
+    if (!email) return;
+    setResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: window.location.origin + "/verifier-email" },
+      });
+      if (error) throw error;
+      toast.success("Email de vérification renvoyé.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors de l'envoi");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth" });
+  }
+
+  return (
+    <SiteLayout>
+      <div className="container-page py-16 max-w-lg">
+        <div className="flex items-center justify-center h-16 w-16 rounded-2xl gradient-accent mb-6">
+          <MailCheck className="h-8 w-8 text-accent-foreground" />
+        </div>
+        <h1 className="text-3xl font-bold">Vérifiez votre adresse email</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          L'accès à l'espace admin est bloqué tant que votre email n'est pas vérifié.
+        </p>
+
+        <div className="mt-6 rounded-xl border border-border bg-card p-5 space-y-3 text-sm">
+          <p>
+            Nous avons envoyé un lien de vérification à{" "}
+            <span className="font-medium text-foreground">{email ?? "votre adresse"}</span>.
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+            <li>Ouvrez votre boîte mail (pensez au dossier Spam/Promotions).</li>
+            <li>Cliquez sur le lien « Confirmer mon email ».</li>
+            <li>Revenez ici puis cliquez sur « J'ai vérifié ».</li>
+          </ol>
+        </div>
+
+        <div className="mt-6 flex flex-col sm:flex-row gap-2">
+          <Button onClick={refresh} disabled={checking} className="flex-1">
+            <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+            J'ai vérifié
+          </Button>
+          <Button variant="outline" onClick={resend} disabled={resending || !email} className="flex-1">
+            {resending ? "Envoi..." : "Renvoyer l'email"}
+          </Button>
+        </div>
+
+        <div className="mt-8 flex items-center justify-between text-xs">
+          <Link to="/" className="text-muted-foreground hover:underline">← Retour à l'accueil</Link>
+          <button onClick={signOut} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+            <LogOut className="h-3 w-3" /> Se déconnecter
+          </button>
+        </div>
+      </div>
+    </SiteLayout>
+  );
+}
