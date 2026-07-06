@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,46 @@ export const Route = createFileRoute("/verifier-email")({
   component: VerifyEmailPage,
 });
 
+const COOLDOWN_KEY = "verify-email-resend";
+const BASE_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 15 * 60_000;
+
+function readCooldown(): { until: number; attempts: number } {
+  if (typeof window === "undefined") return { until: 0, attempts: 0 };
+  try {
+    const raw = localStorage.getItem(COOLDOWN_KEY);
+    if (!raw) return { until: 0, attempts: 0 };
+    const parsed = JSON.parse(raw) as { until?: number; attempts?: number };
+    return { until: parsed.until ?? 0, attempts: parsed.attempts ?? 0 };
+  } catch {
+    return { until: 0, attempts: 0 };
+  }
+}
+
+function translateAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("rate") || m.includes("too many") || m.includes("limit")) {
+    return "Trop de tentatives. Merci de patienter avant de réessayer.";
+  }
+  if (m.includes("already") && m.includes("confirm")) {
+    return "Cet email est déjà vérifié. Reconnectez-vous.";
+  }
+  if (m.includes("not found") || m.includes("user")) {
+    return "Utilisateur introuvable. Veuillez vous reconnecter.";
+  }
+  if (m.includes("network") || m.includes("fetch")) {
+    return "Problème de connexion. Vérifiez votre réseau et réessayez.";
+  }
+  return "Impossible d'envoyer l'email de vérification. Réessayez plus tard.";
+}
+
 function VerifyEmailPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const attemptsRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -47,6 +82,22 @@ function VerifyEmailPage() {
     };
   }, [navigate]);
 
+  // Init cooldown from storage + tick every second
+  useEffect(() => {
+    const { until, attempts } = readCooldown();
+    attemptsRef.current = attempts;
+    const compute = () => {
+      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      setSecondsLeft(left);
+      return left;
+    };
+    if (compute() === 0) return;
+    const id = window.setInterval(() => {
+      if (compute() === 0) window.clearInterval(id);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   async function refresh() {
     setChecking(true);
     try {
@@ -69,6 +120,10 @@ function VerifyEmailPage() {
 
   async function resend() {
     if (!email) return;
+    if (secondsLeft > 0) {
+      toast.error(`Merci de patienter ${secondsLeft}s avant un nouvel envoi.`);
+      return;
+    }
     setResending(true);
     try {
       const { error } = await supabase.auth.resend({
@@ -77,9 +132,28 @@ function VerifyEmailPage() {
         options: { emailRedirectTo: window.location.origin + "/verifier-email" },
       });
       if (error) throw error;
-      toast.success("Email de vérification renvoyé.");
+
+      // Escalating cooldown: 60s, 120s, 240s, ... capped at 15min
+      const attempts = attemptsRef.current + 1;
+      attemptsRef.current = attempts;
+      const wait = Math.min(BASE_COOLDOWN_MS * 2 ** (attempts - 1), MAX_COOLDOWN_MS);
+      const until = Date.now() + wait;
+      try {
+        localStorage.setItem(COOLDOWN_KEY, JSON.stringify({ until, attempts }));
+      } catch {
+        /* ignore */
+      }
+      setSecondsLeft(Math.ceil(wait / 1000));
+      const id = window.setInterval(() => {
+        const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+        setSecondsLeft(left);
+        if (left === 0) window.clearInterval(id);
+      }, 1000);
+
+      toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur lors de l'envoi");
+      const raw = err instanceof Error ? err.message : "";
+      toast.error(translateAuthError(raw));
     } finally {
       setResending(false);
     }
@@ -118,8 +192,17 @@ function VerifyEmailPage() {
             <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
             J'ai vérifié
           </Button>
-          <Button variant="outline" onClick={resend} disabled={resending || !email} className="flex-1">
-            {resending ? "Envoi..." : "Renvoyer l'email"}
+          <Button
+            variant="outline"
+            onClick={resend}
+            disabled={resending || !email || secondsLeft > 0}
+            className="flex-1"
+          >
+            {resending
+              ? "Envoi..."
+              : secondsLeft > 0
+                ? `Renvoyer (${secondsLeft}s)`
+                : "Renvoyer l'email"}
           </Button>
         </div>
 
