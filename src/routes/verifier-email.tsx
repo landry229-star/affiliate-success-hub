@@ -120,6 +120,10 @@ function VerifyEmailPage() {
 
   async function resend() {
     if (!email) return;
+    if (secondsLeft > 0) {
+      toast.error(`Merci de patienter ${secondsLeft}s avant un nouvel envoi.`);
+      return;
+    }
     setResending(true);
     try {
       const { error } = await supabase.auth.resend({
@@ -128,9 +132,28 @@ function VerifyEmailPage() {
         options: { emailRedirectTo: window.location.origin + "/verifier-email" },
       });
       if (error) throw error;
-      toast.success("Email de vérification renvoyé.");
+
+      // Escalating cooldown: 60s, 120s, 240s, ... capped at 15min
+      const attempts = attemptsRef.current + 1;
+      attemptsRef.current = attempts;
+      const wait = Math.min(BASE_COOLDOWN_MS * 2 ** (attempts - 1), MAX_COOLDOWN_MS);
+      const until = Date.now() + wait;
+      try {
+        localStorage.setItem(COOLDOWN_KEY, JSON.stringify({ until, attempts }));
+      } catch {
+        /* ignore */
+      }
+      setSecondsLeft(Math.ceil(wait / 1000));
+      const id = window.setInterval(() => {
+        const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+        setSecondsLeft(left);
+        if (left === 0) window.clearInterval(id);
+      }, 1000);
+
+      toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur lors de l'envoi");
+      const raw = err instanceof Error ? err.message : "";
+      toast.error(translateAuthError(raw));
     } finally {
       setResending(false);
     }
