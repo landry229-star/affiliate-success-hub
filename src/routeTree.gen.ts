@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifierEmailRouteImport } from './routes/verifier-email'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ProduitsRouteImport } from './routes/produits'
 import { Route as MentionsLegalesRouteImport } from './routes/mentions-legales'
@@ -24,6 +25,11 @@ import { Route as CategoriesSlugRouteImport } from './routes/categories.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 
+const VerifierEmailRoute = VerifierEmailRouteImport.update({
+  id: '/verifier-email',
+  path: '/verifier-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/mentions-legales': typeof MentionsLegalesRoute
   '/produits': typeof ProduitsRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/verifier-email': typeof VerifierEmailRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/categories/$slug': typeof CategoriesSlugRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/mentions-legales': typeof MentionsLegalesRoute
   '/produits': typeof ProduitsRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/verifier-email': typeof VerifierEmailRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/categories/$slug': typeof CategoriesSlugRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/mentions-legales': typeof MentionsLegalesRoute
   '/produits': typeof ProduitsRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/verifier-email': typeof VerifierEmailRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/categories/$slug': typeof CategoriesSlugRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/mentions-legales'
     | '/produits'
     | '/sitemap.xml'
+    | '/verifier-email'
     | '/admin'
     | '/blog/$slug'
     | '/categories/$slug'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/mentions-legales'
     | '/produits'
     | '/sitemap.xml'
+    | '/verifier-email'
     | '/admin'
     | '/blog/$slug'
     | '/categories/$slug'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/mentions-legales'
     | '/produits'
     | '/sitemap.xml'
+    | '/verifier-email'
     | '/_authenticated/admin'
     | '/blog/$slug'
     | '/categories/$slug'
@@ -200,12 +212,20 @@ export interface RootRouteChildren {
   MentionsLegalesRoute: typeof MentionsLegalesRoute
   ProduitsRoute: typeof ProduitsRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  VerifierEmailRoute: typeof VerifierEmailRoute
   CategoriesSlugRoute: typeof CategoriesSlugRoute
   GoProductIdRoute: typeof GoProductIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verifier-email': {
+      id: '/verifier-email'
+      path: '/verifier-email'
+      fullPath: '/verifier-email'
+      preLoaderRoute: typeof VerifierEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -350,6 +370,7 @@ const rootRouteChildren: RootRouteChildren = {
   MentionsLegalesRoute: MentionsLegalesRoute,
   ProduitsRoute: ProduitsRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  VerifierEmailRoute: VerifierEmailRoute,
   CategoriesSlugRoute: CategoriesSlugRoute,
   GoProductIdRoute: GoProductIdRoute,
 }
