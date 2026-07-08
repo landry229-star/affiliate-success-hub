@@ -132,6 +132,17 @@ function VerifyEmailPage() {
     };
   }, []);
 
+  // Detect confirmation errors passed in the URL (expired/invalid link, etc.)
+  useEffect(() => {
+    const err = parseConfirmError();
+    if (!err) return;
+    setConfirmError(err);
+    // Clean the URL so a page reload doesn't keep showing the error.
+    if (typeof window !== "undefined" && window.history.replaceState) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   // Load user + initial server-side cooldown state
   useEffect(() => {
     let active = true;
