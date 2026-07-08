@@ -1,6 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  requestVerificationResend,
+  getVerificationResendState,
+} from "@/lib/verify-email.functions";
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -17,97 +22,139 @@ export const Route = createFileRoute("/verifier-email")({
   component: VerifyEmailPage,
 });
 
-const COOLDOWN_KEY = "verify-email-resend";
-const BASE_COOLDOWN_MS = 60_000;
-const MAX_COOLDOWN_MS = 15 * 60_000;
-
-function readCooldown(): { until: number; attempts: number } {
-  if (typeof window === "undefined") return { until: 0, attempts: 0 };
-  try {
-    const raw = localStorage.getItem(COOLDOWN_KEY);
-    if (!raw) return { until: 0, attempts: 0 };
-    const parsed = JSON.parse(raw) as { until?: number; attempts?: number };
-    return { until: parsed.until ?? 0, attempts: parsed.attempts ?? 0 };
-  } catch {
-    return { until: 0, attempts: 0 };
-  }
+function isConfirmed(user: {
+  email_confirmed_at?: string | null;
+  confirmed_at?: string | null;
+  app_metadata?: { provider?: string };
+} | null): boolean {
+  if (!user) return false;
+  return (
+    Boolean(user.email_confirmed_at) ||
+    Boolean(user.confirmed_at) ||
+    user.app_metadata?.provider !== "email"
+  );
 }
 
-function translateAuthError(message: string): string {
-  const m = message.toLowerCase();
-  if (m.includes("rate") || m.includes("too many") || m.includes("limit")) {
-    return "Trop de tentatives. Merci de patienter avant de réessayer.";
+function reasonToMessage(reason: string | undefined): string {
+  switch (reason) {
+    case "cooldown":
+      return "Merci de patienter avant de renvoyer un email.";
+    case "already_verified":
+      return "Votre email est déjà vérifié.";
+    case "provider_error":
+      return "Le service email a refusé l'envoi. Réessayez plus tard.";
+    case "network_error":
+      return "Problème de connexion. Vérifiez votre réseau.";
+    case "no_email":
+      return "Aucune adresse email associée à votre compte.";
+    default:
+      return "Impossible d'envoyer l'email de vérification.";
   }
-  if (m.includes("already") && m.includes("confirm")) {
-    return "Cet email est déjà vérifié. Reconnectez-vous.";
-  }
-  if (m.includes("not found") || m.includes("user")) {
-    return "Utilisateur introuvable. Veuillez vous reconnecter.";
-  }
-  if (m.includes("network") || m.includes("fetch")) {
-    return "Problème de connexion. Vérifiez votre réseau et réessayez.";
-  }
-  return "Impossible d'envoyer l'email de vérification. Réessayez plus tard.";
 }
 
 function VerifyEmailPage() {
   const navigate = useNavigate();
+  const requestResend = useServerFn(requestVerificationResend);
+  const getState = useServerFn(getVerificationResendState);
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const attemptsRef = useRef(0);
+  const tickRef = useRef<number | null>(null);
+
+  function startCountdown(seconds: number) {
+    setSecondsLeft(seconds);
+    if (tickRef.current) window.clearInterval(tickRef.current);
+    if (seconds <= 0) return;
+    const until = Date.now() + seconds * 1000;
+    tickRef.current = window.setInterval(() => {
+      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left === 0 && tickRef.current) {
+        window.clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    }, 1000);
+  }
 
   useEffect(() => {
+    return () => {
+      if (tickRef.current) window.clearInterval(tickRef.current);
+    };
+  }, []);
+
+  // Load user + initial server-side cooldown state
+  useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       if (!active) return;
       const user = data.user;
       if (!user) {
         navigate({ to: "/auth" });
         return;
       }
-      const confirmed =
-        Boolean(user.email_confirmed_at) ||
-        Boolean((user as { confirmed_at?: string | null }).confirmed_at) ||
-        user.app_metadata?.provider !== "email";
-      if (confirmed) {
+      if (isConfirmed(user)) {
         navigate({ to: "/admin" });
         return;
       }
       setEmail(user.email ?? null);
+      try {
+        const state = await getState();
+        if (active && state.secondsLeft > 0) startCountdown(state.secondsLeft);
+      } catch {
+        /* ignore */
+      }
     });
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [navigate, getState]);
 
-  // Init cooldown from storage + tick every second
+  // Auto-redirect on confirmation: listen for auth state + poll refresh every 5s
   useEffect(() => {
-    const { until, attempts } = readCooldown();
-    attemptsRef.current = attempts;
-    const compute = () => {
-      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-      setSecondsLeft(left);
-      return left;
+    let active = true;
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      if (isConfirmed(session?.user ?? null)) {
+        toast.success("Email vérifié !");
+        navigate({ to: "/admin" });
+      }
+    });
+
+    const poll = window.setInterval(async () => {
+      if (!active) return;
+      const { data } = await supabase.auth.refreshSession();
+      if (isConfirmed(data.user)) {
+        toast.success("Email vérifié !");
+        navigate({ to: "/admin" });
+      }
+    }, 5000);
+
+    // Also refresh when the tab regains focus (user clicked link in another tab)
+    const onFocus = async () => {
+      const { data } = await supabase.auth.refreshSession();
+      if (isConfirmed(data.user)) {
+        toast.success("Email vérifié !");
+        navigate({ to: "/admin" });
+      }
     };
-    if (compute() === 0) return;
-    const id = window.setInterval(() => {
-      if (compute() === 0) window.clearInterval(id);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, []);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [navigate]);
 
   async function refresh() {
     setChecking(true);
     try {
       await supabase.auth.refreshSession();
       const { data } = await supabase.auth.getUser();
-      const user = data.user;
-      const confirmed =
-        Boolean(user?.email_confirmed_at) ||
-        Boolean((user as { confirmed_at?: string | null } | null)?.confirmed_at);
-      if (confirmed) {
+      if (isConfirmed(data.user)) {
         toast.success("Email vérifié !");
         navigate({ to: "/admin" });
       } else {
@@ -119,41 +166,19 @@ function VerifyEmailPage() {
   }
 
   async function resend() {
-    if (!email) return;
-    if (secondsLeft > 0) {
-      toast.error(`Merci de patienter ${secondsLeft}s avant un nouvel envoi.`);
-      return;
-    }
+    if (!email || secondsLeft > 0) return;
     setResending(true);
     try {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email,
-        options: { emailRedirectTo: window.location.origin + "/verifier-email" },
-      });
-      if (error) throw error;
-
-      // Escalating cooldown: 60s, 120s, 240s, ... capped at 15min
-      const attempts = attemptsRef.current + 1;
-      attemptsRef.current = attempts;
-      const wait = Math.min(BASE_COOLDOWN_MS * 2 ** (attempts - 1), MAX_COOLDOWN_MS);
-      const until = Date.now() + wait;
-      try {
-        localStorage.setItem(COOLDOWN_KEY, JSON.stringify({ until, attempts }));
-      } catch {
-        /* ignore */
+      const res = await requestResend({ data: undefined as never });
+      if (res.ok) {
+        startCountdown(res.secondsLeft);
+        toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
+      } else {
+        if (res.secondsLeft > 0) startCountdown(res.secondsLeft);
+        toast.error(reasonToMessage(res.reason));
       }
-      setSecondsLeft(Math.ceil(wait / 1000));
-      const id = window.setInterval(() => {
-        const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-        setSecondsLeft(left);
-        if (left === 0) window.clearInterval(id);
-      }, 1000);
-
-      toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : "";
-      toast.error(translateAuthError(raw));
+    } catch {
+      toast.error("Impossible de contacter le serveur. Réessayez.");
     } finally {
       setResending(false);
     }
@@ -173,6 +198,7 @@ function VerifyEmailPage() {
         <h1 className="text-3xl font-bold">Vérifiez votre adresse email</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           L'accès à l'espace admin est bloqué tant que votre email n'est pas vérifié.
+          Cette page se met à jour automatiquement dès la confirmation.
         </p>
 
         <div className="mt-6 rounded-xl border border-border bg-card p-5 space-y-3 text-sm">
@@ -183,7 +209,7 @@ function VerifyEmailPage() {
           <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
             <li>Ouvrez votre boîte mail (pensez au dossier Spam/Promotions).</li>
             <li>Cliquez sur le lien « Confirmer mon email ».</li>
-            <li>Revenez ici puis cliquez sur « J'ai vérifié ».</li>
+            <li>Revenez sur cet onglet — vous serez redirigé automatiquement.</li>
           </ol>
         </div>
 
