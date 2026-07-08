@@ -155,6 +155,33 @@ export type Database = {
           },
         ]
       }
+      email_resend_attempts: {
+        Row: {
+          attempts: number
+          created_at: string
+          last_sent_at: string | null
+          next_allowed_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          last_sent_at?: string | null
+          next_allowed_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          last_sent_at?: string | null
+          next_allowed_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       posts: {
         Row: {
           content: string
