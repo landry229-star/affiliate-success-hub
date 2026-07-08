@@ -9,7 +9,55 @@ import {
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { MailCheck, RefreshCw, LogOut } from "lucide-react";
+import { MailCheck, RefreshCw, LogOut, AlertTriangle } from "lucide-react";
+
+type ConfirmError = { code: string; title: string; message: string };
+
+function parseConfirmError(): ConfirmError | null {
+  if (typeof window === "undefined") return null;
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(
+    window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+  );
+  const get = (k: string) => search.get(k) ?? hash.get(k);
+  const error = get("error");
+  const code = get("error_code") ?? get("error");
+  const description = get("error_description");
+  if (!error && !code && !description) return null;
+
+  const c = (code ?? "").toLowerCase();
+  if (c.includes("otp_expired") || c.includes("expired")) {
+    return {
+      code: c,
+      title: "Le lien de confirmation a expiré",
+      message:
+        "Ce lien de vérification n'est plus valable. Cliquez ci-dessous pour en recevoir un nouveau.",
+    };
+  }
+  if (c.includes("access_denied")) {
+    return {
+      code: c,
+      title: "Confirmation refusée",
+      message:
+        "Le lien a été refusé ou a déjà été utilisé. Demandez un nouvel email de vérification.",
+    };
+  }
+  if (c.includes("invalid") || c.includes("bad_jwt") || c.includes("token")) {
+    return {
+      code: c,
+      title: "Lien de confirmation invalide",
+      message:
+        "Ce lien n'est pas reconnu. Il a peut-être été tronqué par votre client mail. Renvoyez-en un nouveau.",
+    };
+  }
+  return {
+    code: c || "unknown",
+    title: "La confirmation a échoué",
+    message: description
+      ? decodeURIComponent(description.replace(/\+/g, " "))
+      : "Une erreur inattendue est survenue. Vous pouvez relancer la vérification ci-dessous.",
+  };
+}
 
 export const Route = createFileRoute("/verifier-email")({
   ssr: false,
