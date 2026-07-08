@@ -9,7 +9,55 @@ import {
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { MailCheck, RefreshCw, LogOut } from "lucide-react";
+import { MailCheck, RefreshCw, LogOut, AlertTriangle } from "lucide-react";
+
+type ConfirmError = { code: string; title: string; message: string };
+
+function parseConfirmError(): ConfirmError | null {
+  if (typeof window === "undefined") return null;
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(
+    window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+  );
+  const get = (k: string) => search.get(k) ?? hash.get(k);
+  const error = get("error");
+  const code = get("error_code") ?? get("error");
+  const description = get("error_description");
+  if (!error && !code && !description) return null;
+
+  const c = (code ?? "").toLowerCase();
+  if (c.includes("otp_expired") || c.includes("expired")) {
+    return {
+      code: c,
+      title: "Le lien de confirmation a expiré",
+      message:
+        "Ce lien de vérification n'est plus valable. Cliquez ci-dessous pour en recevoir un nouveau.",
+    };
+  }
+  if (c.includes("access_denied")) {
+    return {
+      code: c,
+      title: "Confirmation refusée",
+      message:
+        "Le lien a été refusé ou a déjà été utilisé. Demandez un nouvel email de vérification.",
+    };
+  }
+  if (c.includes("invalid") || c.includes("bad_jwt") || c.includes("token")) {
+    return {
+      code: c,
+      title: "Lien de confirmation invalide",
+      message:
+        "Ce lien n'est pas reconnu. Il a peut-être été tronqué par votre client mail. Renvoyez-en un nouveau.",
+    };
+  }
+  return {
+    code: c || "unknown",
+    title: "La confirmation a échoué",
+    message: description
+      ? decodeURIComponent(description.replace(/\+/g, " "))
+      : "Une erreur inattendue est survenue. Vous pouvez relancer la vérification ci-dessous.",
+  };
+}
 
 export const Route = createFileRoute("/verifier-email")({
   ssr: false,
@@ -60,6 +108,7 @@ function VerifyEmailPage() {
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [confirmError, setConfirmError] = useState<ConfirmError | null>(null);
   const tickRef = useRef<number | null>(null);
 
   function startCountdown(seconds: number) {
@@ -81,6 +130,17 @@ function VerifyEmailPage() {
     return () => {
       if (tickRef.current) window.clearInterval(tickRef.current);
     };
+  }, []);
+
+  // Detect confirmation errors passed in the URL (expired/invalid link, etc.)
+  useEffect(() => {
+    const err = parseConfirmError();
+    if (!err) return;
+    setConfirmError(err);
+    // Clean the URL so a page reload doesn't keep showing the error.
+    if (typeof window !== "undefined" && window.history.replaceState) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
   }, []);
 
   // Load user + initial server-side cooldown state
@@ -171,6 +231,7 @@ function VerifyEmailPage() {
     try {
       const res = await requestResend();
       if (res.ok) {
+        setConfirmError(null);
         startCountdown(res.secondsLeft);
         toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
       } else {
@@ -200,6 +261,36 @@ function VerifyEmailPage() {
           L'accès à l'espace admin est bloqué tant que votre email n'est pas vérifié.
           Cette page se met à jour automatiquement dès la confirmation.
         </p>
+
+        {confirmError ? (
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 p-5 space-y-3 text-sm"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-destructive">{confirmError.title}</p>
+                <p className="text-destructive/90">{confirmError.message}</p>
+                <p className="text-xs text-destructive/70">Code : {confirmError.code}</p>
+              </div>
+            </div>
+            <Button
+              onClick={resend}
+              disabled={resending || !email || secondsLeft > 0}
+              size="sm"
+              variant="destructive"
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${resending ? "animate-spin" : ""}`} />
+              {resending
+                ? "Envoi..."
+                : secondsLeft > 0
+                  ? `Relancer (${secondsLeft}s)`
+                  : "Relancer la vérification"}
+            </Button>
+          </div>
+        ) : null}
 
         <div className="mt-6 rounded-xl border border-border bg-card p-5 space-y-3 text-sm">
           <p>
