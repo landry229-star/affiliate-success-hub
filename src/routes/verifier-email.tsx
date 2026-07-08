@@ -169,7 +169,7 @@ function VerifyEmailPage() {
     if (!email || secondsLeft > 0) return;
     setResending(true);
     try {
-      const res = await requestResend({ data: undefined as never });
+      const res = await requestResend();
       if (res.ok) {
         startCountdown(res.secondsLeft);
         toast.success("Email de vérification renvoyé. Vérifiez votre boîte mail.");
