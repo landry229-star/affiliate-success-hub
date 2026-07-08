@@ -108,6 +108,7 @@ function VerifyEmailPage() {
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [confirmError, setConfirmError] = useState<ConfirmError | null>(null);
   const tickRef = useRef<number | null>(null);
 
   function startCountdown(seconds: number) {
