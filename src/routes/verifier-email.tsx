@@ -262,6 +262,36 @@ function VerifyEmailPage() {
           Cette page se met à jour automatiquement dès la confirmation.
         </p>
 
+        {confirmError ? (
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 p-5 space-y-3 text-sm"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-destructive">{confirmError.title}</p>
+                <p className="text-destructive/90">{confirmError.message}</p>
+                <p className="text-xs text-destructive/70">Code : {confirmError.code}</p>
+              </div>
+            </div>
+            <Button
+              onClick={resend}
+              disabled={resending || !email || secondsLeft > 0}
+              size="sm"
+              variant="destructive"
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${resending ? "animate-spin" : ""}`} />
+              {resending
+                ? "Envoi..."
+                : secondsLeft > 0
+                  ? `Relancer (${secondsLeft}s)`
+                  : "Relancer la vérification"}
+            </Button>
+          </div>
+        ) : null}
+
         <div className="mt-6 rounded-xl border border-border bg-card p-5 space-y-3 text-sm">
           <p>
             Nous avons envoyé un lien de vérification à{" "}
