@@ -9,7 +9,7 @@ import {
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { MailCheck, RefreshCw, LogOut, AlertTriangle } from "lucide-react";
+import { MailCheck, RefreshCw, LogOut, AlertTriangle, Clock, CheckCircle2, XCircle } from "lucide-react";
 
 type ConfirmError = { code: string; title: string; message: string };
 
