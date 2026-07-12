@@ -9,7 +9,7 @@ import {
 import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { MailCheck, RefreshCw, LogOut, AlertTriangle } from "lucide-react";
+import { MailCheck, RefreshCw, LogOut, AlertTriangle, Clock, CheckCircle2, XCircle } from "lucide-react";
 
 type ConfirmError = { code: string; title: string; message: string };
 
@@ -261,6 +261,75 @@ function VerifyEmailPage() {
           L'accès à l'espace admin est bloqué tant que votre email n'est pas vérifié.
           Cette page se met à jour automatiquement dès la confirmation.
         </p>
+
+        {(() => {
+          const status: "expired" | "confirmed" | "pending" = confirmError
+            ? "expired"
+            : "pending";
+          const cfg = {
+            pending: {
+              Icon: Clock,
+              tone: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              iconTone: "text-amber-600 dark:text-amber-400",
+              label: "En attente",
+              desc: "Nous attendons votre clic sur le lien de confirmation reçu par email.",
+              btn: {
+                label: secondsLeft > 0 ? `Renvoyer (${secondsLeft}s)` : "Renvoyer l'email",
+                onClick: resend,
+                disabled: resending || !email || secondsLeft > 0,
+                variant: "default" as const,
+              },
+            },
+            expired: {
+              Icon: XCircle,
+              tone: "border-destructive/40 bg-destructive/10 text-destructive",
+              iconTone: "text-destructive",
+              label: "Lien expiré ou invalide",
+              desc: "Votre dernier lien de vérification n'est plus utilisable. Générez-en un nouveau.",
+              btn: {
+                label: secondsLeft > 0 ? `Relancer (${secondsLeft}s)` : "Relancer la vérification",
+                onClick: resend,
+                disabled: resending || !email || secondsLeft > 0,
+                variant: "destructive" as const,
+              },
+            },
+            confirmed: {
+              Icon: CheckCircle2,
+              tone: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              iconTone: "text-emerald-600 dark:text-emerald-400",
+              label: "Email confirmé",
+              desc: "Redirection vers l'espace admin…",
+              btn: {
+                label: "Aller à l'admin",
+                onClick: () => navigate({ to: "/admin" }),
+                disabled: false,
+                variant: "default" as const,
+              },
+            },
+          }[status];
+          const { Icon } = cfg;
+          return (
+            <div className={`mt-6 rounded-xl border p-5 flex items-start gap-4 ${cfg.tone}`}>
+              <Icon className={`h-6 w-6 shrink-0 mt-0.5 ${cfg.iconTone}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="font-semibold text-foreground">Statut : {cfg.label}</p>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{cfg.desc}</p>
+                <Button
+                  size="sm"
+                  variant={cfg.btn.variant}
+                  onClick={cfg.btn.onClick}
+                  disabled={cfg.btn.disabled}
+                  className="mt-3"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-2 ${resending ? "animate-spin" : ""}`} />
+                  {cfg.btn.label}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
 
         {confirmError ? (
           <div

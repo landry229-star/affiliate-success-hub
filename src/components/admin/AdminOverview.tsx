@@ -1,10 +1,24 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Newspaper, FolderTree, MousePointerClick, ArrowRight } from "lucide-react";
+import { Package, Newspaper, FolderTree, MousePointerClick, ArrowRight, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AdminSection } from "./AdminShell";
 
 export function AdminOverview({ onNavigate }: { onNavigate: (s: AdminSection) => void }) {
+  const [verif, setVerif] = useState<{ email: string | null; confirmed: boolean; provider: string } | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user;
+      if (!u) return;
+      const confirmed =
+        Boolean(u.email_confirmed_at) ||
+        Boolean((u as { confirmed_at?: string | null }).confirmed_at) ||
+        u.app_metadata?.provider !== "email";
+      setVerif({ email: u.email ?? null, confirmed, provider: u.app_metadata?.provider ?? "email" });
+    });
+  }, []);
   const { data } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: async () => {
@@ -38,6 +52,40 @@ export function AdminOverview({ onNavigate }: { onNavigate: (s: AdminSection) =>
 
   return (
     <div className="space-y-8">
+      {verif && (
+        <div
+          className={`rounded-2xl border p-5 flex flex-col sm:flex-row sm:items-center gap-4 ${
+            verif.confirmed
+              ? "border-emerald-500/30 bg-emerald-500/5"
+              : "border-destructive/40 bg-destructive/10"
+          }`}
+        >
+          <div
+            className={`h-11 w-11 rounded-xl grid place-items-center shrink-0 ${
+              verif.confirmed
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-destructive/15 text-destructive"
+            }`}
+          >
+            {verif.confirmed ? <ShieldCheck className="h-5 w-5" /> : <ShieldAlert className="h-5 w-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">
+              {verif.confirmed ? "Email vérifié" : "Email non vérifié"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              {verif.email ?? "—"}
+              {verif.provider !== "email" && verif.confirmed ? ` · via ${verif.provider}` : ""}
+            </p>
+          </div>
+          {!verif.confirmed && (
+            <Button asChild size="sm" variant="destructive">
+              <Link to="/verifier-email">Vérifier maintenant <ArrowRight className="ml-1 h-4 w-4" /></Link>
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <button
