@@ -7,6 +7,18 @@ import { Button } from "@/components/ui/button";
 import type { AdminSection } from "./AdminShell";
 
 export function AdminOverview({ onNavigate }: { onNavigate: (s: AdminSection) => void }) {
+  const [verif, setVerif] = useState<{ email: string | null; confirmed: boolean; provider: string } | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user;
+      if (!u) return;
+      const confirmed =
+        Boolean(u.email_confirmed_at) ||
+        Boolean((u as { confirmed_at?: string | null }).confirmed_at) ||
+        u.app_metadata?.provider !== "email";
+      setVerif({ email: u.email ?? null, confirmed, provider: u.app_metadata?.provider ?? "email" });
+    });
+  }, []);
   const { data } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: async () => {
