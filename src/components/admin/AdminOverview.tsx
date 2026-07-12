@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Newspaper, FolderTree, MousePointerClick, ArrowRight } from "lucide-react";
+import { Package, Newspaper, FolderTree, MousePointerClick, ArrowRight, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AdminSection } from "./AdminShell";
 
